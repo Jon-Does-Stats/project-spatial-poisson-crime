@@ -1,0 +1,1269 @@
+---
+title: "Spatial Analysis - Violent Crimes in Boston"
+author: "Jonathan Schierbaum"
+date: "SPRING 2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+packages <- c("mgcv", "dplyr", "sf", 
+              "ggplot2", "ggmap", "gifski", 
+              "mgcViz", "viridis", "colorspace", 
+              "RColorBrewer", "grid", "gridGraphics", 
+              "gridExtra")
+
+missing <- packages[!(packages %in% installed.packages())]
+
+if(length(missing) > 0) install.packages(missing) 
+
+invisible(suppressMessages(
+  lapply(packages, library, character.only = TRUE)))
+```
+
+## Load pre-constructed data objects For faster analysis
+
+```{r load_data_objs}
+fp_raw_data <- "~/GitHub/project-spatial-poisson-crime/raw_data/"
+
+fp_data_obj <- "~/GitHub/project-spatial-poisson-crime/data_objs/"
+
+fp_figures <- "~/GitHub/project-spatial-poisson-crime/figures/"
+
+boundary.sf <- read_sf(dsn = paste0(fp_raw_data, "City_of_Boston_Boundary"), 
+                       layer = "City_of_Boston_Boundary")
+
+boundary.sf.4326 <- st_transform(boundary.sf, crs = 4326)
+
+project_crs <- st_crs(boundary.sf.4326)
+
+
+load(paste0(fp_data_obj, "boston_regression_objects.RData")) # Regression model objects
+
+load(paste0(fp_data_obj, "boston_predictions.RData"))        # data grids WITH predictions
+
+load(paste0(fp_data_obj, "boston_predictions_sf.RData"))     # data grids WITH predictions AND spatial embed
+
+load(paste0(fp_data_obj, "boston_spatial_project_r1.RData")) # mapping objects and raw data
+```
+
+## EDA plots (observed counts)
+```{r observed_plots}
+X_max  <- max(st_coordinates(bounded_map.15to21)[,1])
+X_min  <- min(st_coordinates(bounded_map.15to21)[,1])
+Y_max  <- max(st_coordinates(bounded_map.15to21)[,2])
+Y_min  <- min(st_coordinates(bounded_map.15to21)[,2])
+
+basemap.boston <- get_stamenmap(bbox = c(X_min,Y_min,X_max,Y_max),
+                    maptype = "terrain-lines", zoom = 13)
+
+scale_lim.low  <- min(project.grid.all$n)
+scale_lim.high <- max(project.grid.all$n)
+scale_lim.high <- 480  # produces a slightly nicer plot.
+
+### GIF OF OBSERVED
+width_in <-  7
+height_in <- 5
+reso <- 225
+
+png_fp <- file.path(tempdir(), "frame%03d.png")
+png(png_fp, width = (width_in * reso), height = (height_in * reso), res = reso)
+par(ask = FALSE)
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(fill = n), data = project.grid.all, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2015-2021") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+scale_lim.low  <- min(c(project.grid.15$n, project.grid.16$n, project.grid.17$n, 
+                        project.grid.18$n, project.grid.19$n, project.grid.20$n, 
+                        project.grid.21$n))
+
+scale_lim.high <- max(c(project.grid.15$n, project.grid.16$n, project.grid.17$n, 
+                        project.grid.18$n, project.grid.19$n, project.grid.20$n, 
+                        project.grid.21$n))
+
+      
+ggmap(basemap.boston) + 
+        geom_sf(aes(fill = n), data = project.grid.15, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2015") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) +       
+        geom_sf(aes(fill = n), data = project.grid.16, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2016") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) +       
+        geom_sf(aes(fill = n), data = project.grid.17, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2017") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) +       
+        geom_sf(aes(fill = n), data = project.grid.18, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2018") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) +       
+        geom_sf(aes(fill = n), data = project.grid.19, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2019") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+       theme(axis.title = element_blank())   
+      
+ggmap(basemap.boston) +       
+        geom_sf(aes(fill = n), data = project.grid.20, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2020") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) +       
+        geom_sf(aes(fill = n), data = project.grid.21, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2021") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+scale_lim.low  <- min(project.grid.all$n)
+scale_lim.high <- max(project.grid.all$n)
+scale_lim.high <- 480  # produces a slightly nicer plot.
+
+ggmap(basemap.boston) +  
+        geom_sf(aes(fill = n), data = project.grid.all, alpha = 0.75, inherit.aes = F) + 
+        scale_fill_viridis(breaks = seq(scale_lim.low, scale_lim.high, length.out = 13), 
+                           limits = c(scale_lim.low, scale_lim.high), 
+                           option = "E", name = "Annual violent \ncrimes") + 
+        ggtitle("Violent Crimes in Boston: 2015-2021") + 
+        guides(fill = guide_legend(override.aes = list(size = 1))) + 
+        guides(fill = guide_legend(reverse = T)) + 
+        theme(axis.title = element_blank())   
+
+dev.off()
+
+png_files <- sprintf(png_fp, 1:9)
+gif_fp <- paste0(fp_figures, "observed_violent_crimes.gif")
+gifski(png_files, gif_fp, delay = 2)
+unlink(png_files)
+utils::browseURL(gif_fp)
+```
+
+
+## Model selection and diagnostics
+
+```{r model_selection_diagnostics}
+### MODEL MATRIX FOR ALL VIOLENT CRIME ###
+modelall.df <- as.data.frame(st_drop_geometry(project.grid.all[, 2:4]))
+
+names(modelall.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(modelall.df)){
+  if (is.na(modelall.df[i,"crimes"])) {modelall.df[i,"crimes"] <- 0}  
+  else {modelall.df[i,"crimes"] <- modelall.df[i,"crimes"]}  
+}
+
+### BUILD DIFFERENT MODELS ###
+
+# k: set an upper limit on the ﬂexibility of a smooth term
+model1 <- gam(crimes ~ s(x, y, k = 300), family = nb, method = "REML", data = modelall.df)
+
+model2 <- gam(crimes ~ s(x, y, k = 300), family = poisson(link = "log"), method = "REML", data = modelall.df)
+
+model3 <- gam(crimes ~ s(x, y, k = 300), family = quasipoisson(link = "log"), method = "REML", data = modelall.df)
+
+model4 <- gam(crimes ~ s(x, y, k = 300), family = ziP(), data = modelall.df)
+
+model5 <- gam(crimes ~ s(x, k = 25, bs = "cr")+ s(y, k = 25, bs = "cr") + ti(x, y, k = 25), family = nb, method = "REML", data = modelall.df)
+
+model6 <- gam(crimes ~ te(x, y, k = 25), family = nb, method = "REML", data = modelall.df)
+
+### DIAGNOSE DIFFERENT MODELS ###
+check.gamViz(getViz(model1))
+check.gamViz(getViz(model2))
+check.gamViz(getViz(model3))
+check.gamViz(getViz(model4))
+check.gamViz(getViz(model5))
+check.gamViz(getViz(model6))
+
+### OTHER DIAGNOSES ###
+AIC(model1, model2, model3, model4, model5, model6)
+
+### CHECK RATE OF VARIANCE INCREASE ### 
+e <- residuals(model1)
+fitted1 <- fitted(model1)
+lm(log(e^2) ~ log(fitted1))
+# looks ok....if log(fitted) = 2, then the variance of the data increases with the square of the mean.
+
+### CHECK RESIDUALS ###
+fitted2  <- fitted(model2)
+fitted3  <- fitted(model3)
+fitted5  <- fitted(model5)
+observed.all <- project.grid.all$n
+
+sum_resids_1 <- sum((fitted1 - observed.all)^2) # RSS
+sum_resids_2 <- sum((fitted2 - observed.all)^2)
+sum_resids_3 <- sum((fitted3 - observed.all)^2)
+sum_resids_5 <- sum((fitted5 - observed.all)^2)
+```
+
+```{r diagnostic_plot}
+### COMPARE RESPONSE TYPES
+model1.viz <- getViz(model1)
+model2.viz <- getViz(model2)
+
+check.gamViz(model1.viz)
+check.gamViz(model2.viz)
+
+
+# QQ plots:  use direct simulation. For each replicate, data are simulated from the fitted model, and the corresponding residuals computed.
+viz1 <- qq.gamViz(model1.viz, rep = 25, showReps = T, CI = "none", a.qqpoi = list("shape" = 19), a.replin = list("alpha" = 0.2)) + labs(title = "Response: Negative Binomial Family") +
+xlab("theoretical quantiles")
+
+  viz2 <- qq.gamViz(model2.viz, rep = 25, showReps = T, CI = "none", a.qqpoi = list("shape" = 19), a.replin = list("alpha" = 0.2)) + labs(title = "Response: Poisson Family") +
+xlab("theoretical quantiles")
+
+width_in <-  10
+height_in <- 5
+reso <- 225
+
+png(file=paste0(fp_figures,"family_diagnostics_qq", ".png"), width = width_in, height = height_in, unit = "in", res = reso, antialias = "cleartype")
+
+gridPrint(viz1,viz2, ncol = 2)
+
+dev.off()
+
+# histogram of residuals
+resids.df1 <- as.data.frame(cbind(1:length(residuals.gamViz(model1.viz)), residuals.gamViz(model1.viz)))
+resids.df2 <- as.data.frame(cbind(1:length(residuals.gamViz(model2.viz)), residuals.gamViz(model2.viz)))
+
+names(resids.df1) <- names(resids.df2) <- c("id", "deviance_resids")
+
+viz3 <- ggplot(data = resids.df1, aes(deviance_resids)) +                         
+          geom_histogram(alpha = 0.5) + 
+          geom_vline(aes(xintercept=median(deviance_resids)),                 
+                     color = "red", linetype = "dashed", size = 1 ) + 
+          xlab("deviance residuals") + 
+          ylab("frequency") +
+          labs(title = "Response: Negative Binomial Family")
+
+viz4 <- ggplot(data = resids.df2, aes(deviance_resids)) +                         
+          geom_histogram(alpha = 0.5) + 
+          geom_vline(aes(xintercept=median(deviance_resids)),                 
+                     color = "red", linetype = "dashed", size = 1) + 
+          xlab("deviance residuals") + 
+          ylab("frequency") + 
+          labs(title = "Response: Poisson Family")
+
+width_in <-  10
+height_in <- 5
+reso <- 225
+
+png(file=paste0(fp_figures,"family_diagnostics_resids_hist", ".png"), width = width_in, height = height_in, unit = "in", res = reso, antialias = "cleartype")
+
+grid.arrange(viz3, viz4, ncol = 2)
+
+dev.off()
+
+# smoothing term
+
+plot(sm(model1.viz, 1)) + labs(subtitle = "Smooth effect, DOF = 155.53") + labs(title = "Response: Negative Binomial Family") + xlab("longitude") + ylab("latitude")
+
+viz5 <- grid.grab()
+
+dev.off()
+
+plot(sm(model2.viz, 1)) + labs(subtitle = "Smooth effect, DOF = 273.55") + labs(title="Response: Poisson Family") + xlab("longitude") + ylab("latitude")
+
+viz6 <- grid.grab()
+
+dev.off()
+
+width_in <-  10
+height_in <- 5.5
+reso <- 225
+
+png(file=paste0(fp_figures,"family_diagnostics_smoothing", ".png"), width = width_in, height = height_in, unit = "in", res = reso, antialias = "cleartype")
+
+grid.arrange(viz5, viz6, ncol = 2)
+
+dev.off()
+
+### COMPARE SPLINE TYPES
+
+model5.viz <- getViz(model5)
+
+check.gamViz(model1.viz)
+check.gamViz(model5.viz)
+
+plot.gamViz(model1.viz, residuals = T, allTerms = T)
+plot.gamViz(model5.viz, residuals = T, allTerms = T)
+```
+
+### Final model selection: train/test set prediction performance
+
+```{r train_test_competition, eval= FALSE}
+### PREDICTION CHECK OF TOP THREE MODELS ###
+### HOLD OUT 20% OF DATA, PREDICT, REPEAT.
+
+n_iter <- 100
+
+pred_results <- matrix(0, nrow = n_iter, ncol = 3)
+
+for (i in 1:n_iter){ 
+  idx <- sample(1:nrow(modelall.df), size = ceiling(nrow(modelall.df) * .20))
+
+  train.df <- modelall.df[-idx,]
+  test.df  <- modelall.df[idx,]
+
+  model.1 <- gam(crimes ~ s(x, y, k = 300), family = nb, method = "REML", data = train.df)
+
+  model.3 <- gam(crimes ~ s(x, y, k = 300), family = quasipoisson(link = "log"), method = "REML", data = train.df)
+
+  model.5 <- gam(crimes ~ s(x, k = 25, bs = "cr")+ s(y, k = 25, bs = "cr") + ti(x, y, k = 25), family = nb, method = "REML", data = train.df)
+
+  response.preds1 <- as.vector(predict(model.1, newdata = test.df[,1:2], type = "response"))
+  response.preds3 <- as.vector(predict(model.3, newdata = test.df[,1:2], type = "response"))
+  response.preds5 <- as.vector(predict(model.5, newdata = test.df[,1:2], type = "response"))
+
+  observed1 <- test.df$crimes
+
+  check1 <- sum((response.preds1 - observed1)^2)
+  check3 <- sum((response.preds3 - observed1)^2)
+  check5 <- sum((response.preds5 - observed1)^2)
+  
+  pred_results[i, 1] <- check1
+  pred_results[i, 2] <- check3
+  pred_results[i, 3] <- check5
+}
+                       #   model1   model3   model5
+colMeans(pred_results) #  148659.2 147667.0 146370.7
+
+
+rm(model.1, model.2, model.3, test.df, train.df)
+```
+
+## Spatial patterning in residuals (plots)
+
+```{r resids_spatial_dependence}
+# note: A Gaussian GAM with identity link is just an ordinary linear model. In this situation, response residuals, deviance residuals, and pearson residuals are the same.
+
+
+years <- c("15", "16", "17", "18", "19", "20", "21")
+
+
+residuals.array <- array(matrix(0, nrow = nrow(modelall.df), ncol = (ncol(modelall.df) + 5)), dim = c(nrow(modelall.df), (ncol(modelall.df) + 5), length(years)))
+
+for (i in years){ 
+
+  resids.response       <- residuals(eval(as.name(paste0("model", i))), type = "response")        # Response residuals: raw residuals (data minus fitted values)
+
+
+
+  resids.deviance       <- residuals(eval(as.name(paste0("model", i))), type = "deviance")        # Deviance residuals: residuals defined by model family
+
+
+
+  resids.pearson        <- residuals(eval(as.name(paste0("model", i))), type = "pearson")         # Pearson residuals: raw residuals divided by the standard deviation of the data 
+
+
+
+  resids.pearson.scaled <- residuals(eval(as.name(paste0("model", i))), type = "scaled.pearson")  # Scaled Pearson residuals: raw residuals divided by the standard deviation of the data 
+                                                                                                  # according to the model mean variance relationship and estimated scale parameter.
+
+
+  resids.working        <- residuals(eval(as.name(paste0("model", i))), type = "working")         # Working residuals: residuals returned from model fitting at convergence
+
+
+  resids.all            <- cbind(eval(as.name(paste0("model", i, ".df"))), 
+                                 resids.response, resids.deviance, resids.pearson, 
+                                 resids.pearson.scaled, resids.working)  
+
+  counter               <- as.numeric(which(years == i))
+  
+  residuals.array[ , , counter] <- as.matrix(resids.all)
+  }
+
+resids.15 <- as.data.frame(residuals.array[ , , which(years == "15")])
+
+names(resids.15) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.15 <- st_as_sf(resids.15, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.16 <- as.data.frame(residuals.array[ , , which(years == "16")])
+
+names(resids.16) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.16 <- st_as_sf(resids.16, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.17 <- as.data.frame(residuals.array[ , , which(years == "17")])
+
+names(resids.17) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.17 <- st_as_sf(resids.17, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.18 <- as.data.frame(residuals.array[ , , which(years == "18")])
+
+names(resids.18) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.18 <- st_as_sf(resids.18, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.19 <- as.data.frame(residuals.array[ , , which(years == "19")])
+
+names(resids.19) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.19 <- st_as_sf(resids.19, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.20 <- as.data.frame(residuals.array[ , , which(years == "20")])
+
+names(resids.20) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.20 <- st_as_sf(resids.20, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+resids.21 <- as.data.frame(residuals.array[ , , which(years == "21")])
+
+names(resids.21) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.21 <- st_as_sf(resids.21, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+width_in <-  7
+height_in <- 5
+reso <- 225
+
+png_fp <- file.path(tempdir(), "frame%03d.png")
+png(png_fp, width = (width_in * reso), height = (height_in * reso), res = reso)
+par(ask = FALSE)
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.15, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2015") + 
+  theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.16, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2016") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.17, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2017") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.18, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2018") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.19, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2019") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.20, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2020") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.21, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2021") + 
+  theme(axis.title = element_blank())
+
+dev.off()
+
+png_files <- sprintf(png_fp, 1:7)
+gif_fp <- paste0(fp_figures, "residual_spatial_patterning.gif")
+gifski(png_files, gif_fp, delay = 2)
+unlink(png_files)
+utils::browseURL(gif_fp)
+```
+
+## Interpolate crime count across grid of points
+
+```{r prediction_data_objs}
+
+### READY REFERENCE DATASETS BY YEAR ###
+model15.df <- as.data.frame(st_drop_geometry(project.grid.15[, 2:4]))
+
+names(model15.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model15.df)){
+  if (is.na(model15.df[i, "crimes"])) {model15.df[i, "crimes"] <- 0}  
+  else {model15.df[i, "crimes"] <- model15.df[i, "crimes"]}  
+  }
+
+model16.df <- as.data.frame(st_drop_geometry(project.grid.16[,2:4]))
+
+names(model16.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model16.df)){
+  if (is.na(model16.df[i, "crimes"])) {model16.df[i, "crimes"] <- 0}  
+  else {model16.df[i, "crimes"] <- model16.df[i, "crimes"]}  
+  }
+
+model17.df <- as.data.frame(st_drop_geometry(project.grid.17[, 2:4]))
+
+names(model17.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model17.df)){
+  if (is.na(model17.df[i, "crimes"])) {model17.df[i, "crimes"] <- 0}  
+  else {model17.df[i, "crimes"] <- model17.df[i, "crimes"]}  
+  }
+
+model18.df <- as.data.frame(st_drop_geometry(project.grid.18[, 2:4]))
+
+names(model18.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model18.df)){
+  if (is.na(model18.df[i, "crimes"])) {model18.df[i, "crimes"] <- 0}  
+  else {model18.df[i, "crimes"] <- model18.df[i, "crimes"]}  
+  }
+
+model19.df <- as.data.frame(st_drop_geometry(project.grid.19[, 2:4]))
+
+names(model19.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model19.df)){
+  if (is.na(model19.df[i, "crimes"])) {model19.df[i, "crimes"] <- 0}  
+  else {model19.df[i, "crimes"] <- model19.df[i, "crimes"]}  
+  }
+
+model20.df <- as.data.frame(st_drop_geometry(project.grid.20[, 2:4]))
+
+names(model20.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model20.df)){
+  if (is.na(model20.df[i, "crimes"])) {model20.df[i, "crimes"] <- 0}  
+  else {model20.df[i, "crimes"] <- model20.df[i, "crimes"]}  
+  }
+
+model21.df <- as.data.frame(st_drop_geometry(project.grid.21[, 2:4]))
+
+names(model21.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(model21.df)){
+  if (is.na(model21.df[i, "crimes"])) {model21.df[i, "crimes"] <- 0}  
+  else {model21.df[i, "crimes"] <- model21.df[i, "crimes"]}  
+}
+
+modelall.df <- as.data.frame(st_drop_geometry(project.grid.all[, 2:4]))
+
+names(modelall.df) <- c("x", "y", "crimes") 
+
+for (i in 1:nrow(modelall.df)){
+  if (is.na(modelall.df[i, "crimes"])) {modelall.df[i, "crimes"] <- 0}  
+  else {modelall.df[i, "crimes"] <- modelall.df[i, "crimes"]}  
+}
+
+### USE BEST MODEL AND RUN BY YEAR
+model15   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model15.df)
+model16   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model16.df)
+model17   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model17.df)
+model18   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model18.df)
+model19   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model19.df)
+model20   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model20.df)
+model21   <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = model21.df)
+model.all <- gam(crimes ~ s(x, k = 25, bs = "cr") + s(y, k = 25, bs = "cr") + ti(y, x, k = 25), family = nb, method="REML", data = modelall.df)
+
+
+### MAKE GRID TO PREDICT ACROSS ###
+# X_max  <- max(c(st_bbox(bounded_map.15to21)[3], st_bbox(boundary.sf.4326["CITY"])[3]))
+# X_min  <- min(c(st_bbox(bounded_map.15to21)[1], st_bbox(boundary.sf.4326["CITY"])[1]))
+# Y_max  <- max(c(st_bbox(bounded_map.15to21)[4], st_bbox(boundary.sf.4326["CITY"])[4]))
+# Y_min  <- min(c(st_bbox(bounded_map.15to21)[2], st_bbox(boundary.sf.4326["CITY"])[2]))
+
+X_max  <- max(st_coordinates(bounded_map.15to21)[,1])
+X_min  <- min(st_coordinates(bounded_map.15to21)[,1])
+Y_max  <- max(st_coordinates(bounded_map.15to21)[,2])
+Y_min  <- min(st_coordinates(bounded_map.15to21)[,2])
+
+
+X_grid  <- seq(X_min, X_max, length.out = 300)
+Y_grid  <- seq(Y_min, Y_max, length.out = 300)
+
+spat_grid <- expand.grid(x = X_grid, y = Y_grid)
+
+spat_grid_sf <- st_as_sf(spat_grid, coords = c("x", "y"), crs = 4326)
+
+sf_use_s2(FALSE)
+
+spat_grid_sf <- spat_grid_sf[boundary.sf.4326,]
+
+spat_grid <- as.data.frame(st_coordinates(spat_grid_sf))
+
+names(spat_grid) <- c("x", "y")
+
+sf_use_s2(TRUE)
+
+
+### PERFORM ACTUAL PREDICTIONS ###
+
+response.preds15   <- as.vector(predict(model15, newdata = spat_grid, type = "response"))
+response.preds16   <- as.vector(predict(model16, newdata = spat_grid, type = "response"))
+response.preds17   <- as.vector(predict(model17, newdata = spat_grid, type = "response"))
+response.preds18   <- as.vector(predict(model18, newdata = spat_grid, type = "response"))
+response.preds19   <- as.vector(predict(model19, newdata = spat_grid, type = "response"))
+response.preds20   <- as.vector(predict(model20, newdata = spat_grid, type = "response"))
+response.preds21   <- as.vector(predict(model21, newdata = spat_grid, type = "response"))
+response.preds.all <- as.vector(predict(model.all, newdata = spat_grid, type = "response"))
+
+### BIND PREDICTIONS WITH COORDINATES ###
+pred.results15 <- cbind(spat_grid,response.preds15)
+pred.results16 <- cbind(spat_grid,response.preds16)
+pred.results17 <- cbind(spat_grid,response.preds17)
+pred.results18 <- cbind(spat_grid,response.preds18)
+pred.results19 <- cbind(spat_grid,response.preds19)
+pred.results20 <- cbind(spat_grid,response.preds20)
+pred.results21 <- cbind(spat_grid,response.preds21)
+pred.results.all <- cbind(spat_grid,response.preds.all)
+
+pred.results15.sf <- st_as_sf(pred.results15, coords = c("x","y"), crs = project_crs)
+pred.results16.sf <- st_as_sf(pred.results16, coords = c("x","y"), crs = project_crs)
+pred.results17.sf <- st_as_sf(pred.results17, coords = c("x","y"), crs = project_crs)
+pred.results18.sf <- st_as_sf(pred.results18, coords = c("x","y"), crs = project_crs)
+pred.results19.sf <- st_as_sf(pred.results19, coords = c("x","y"), crs = project_crs)
+pred.results20.sf <- st_as_sf(pred.results20, coords = c("x","y"), crs = project_crs)
+pred.results21.sf <- st_as_sf(pred.results21, coords = c("x","y"), crs = project_crs)
+pred.results.all.sf <- st_as_sf(pred.results.all, coords = c("x","y"), crs = project_crs)
+
+
+save(model1, model2, model3, 
+     model4, model5, model6, 
+     model15, model16, model17, 
+     model18, model19, model20, 
+     model21, model.all,
+     file = paste0(fp_data_obj, "boston_regression_objects.RData"))
+
+save(pred.results15, pred.results16, pred.results17, 
+     pred.results18, pred.results19, pred.results20, 
+     pred.results21, pred.results.all, 
+     file = paste0(fp_data_obj, "boston_predictions.RData"))
+
+save(pred.results15.sf, pred.results16.sf, pred.results17.sf, 
+     pred.results18.sf, pred.results19.sf, pred.results20.sf, 
+     pred.results21.sf, pred.results.all.sf, 
+     file = paste0(fp_data_obj, "boston_predictions_sf.RData"))
+
+print("Maximum predicted count:")
+max(c(response.preds15, response.preds16, response.preds17, 
+      response.preds18, response.preds19, response.preds20, 
+      response.preds21))
+
+print("Summary of predicted counts:")
+summary(c(response.preds15, response.preds16, response.preds17, 
+          response.preds18, response.preds19, response.preds20, 
+          response.preds21))
+
+
+
+rm(spat_grid, response.preds15, response.preds16, response.preds17, response.preds18, response.preds19, response.preds20, response.preds21, response.preds.all)
+```
+
+## Visualize interpolated surfaces (plots)
+
+```{r predicted_plots}
+color_scale_max <- max(c(
+  max(pred.results15$response.preds15),
+  max(pred.results16$response.preds16),
+  max(pred.results17$response.preds17),
+  max(pred.results18$response.preds18),
+  max(pred.results19$response.preds19),
+  max(pred.results20$response.preds20),
+  max(pred.results21$response.preds21)))
+
+X_max  <- max(st_coordinates(bounded_map.15to21)[,1])
+X_min  <- min(st_coordinates(bounded_map.15to21)[,1])
+Y_max  <- max(st_coordinates(bounded_map.15to21)[,2])
+Y_min  <- min(st_coordinates(bounded_map.15to21)[,2])
+
+
+basemap.boston <- get_stamenmap(bbox = c(X_min,Y_min,X_max,Y_max),
+                    maptype = "terrain-lines", zoom = 13)
+
+cols <- c("#FFFFFF", rev(hcl.colors(16, palette = "YlOrRd")))
+
+### GIF OF OBSERVED
+width_in <-  7
+height_in <- 5
+reso <- 225
+
+png_fp <- file.path(tempdir(), "frame%03d.png")
+png(png_fp, width = (width_in * reso), height = (height_in * reso), res = reso)
+par(ask = FALSE)
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results.all, 
+                     aes(x = x, y = y, z = response.preds.all), 
+                     breaks = c(0, seq(1, ceiling(max( pred.results.all$response.preds.all)), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2015-2021", fill = "Total violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results15, 
+                     aes(x = x, y = y, z = response.preds15), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2015", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results16, 
+                     aes(x = x, y = y, z = response.preds16), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2016", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results17, 
+                     aes(x = x, y = y, z = response.preds17), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2017", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results18, 
+                     aes(x = x, y = y, z = response.preds18), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2018", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results19, 
+                     aes(x = x, y = y, z = response.preds19), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2019", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results20, 
+                     aes(x = x, y = y, z = response.preds20), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2020", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results21, 
+                     aes(x = x, y = y, z = response.preds21), 
+                     breaks = c(0, seq(1, ceiling(color_scale_max), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2021", fill = "Annual violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+ggmap(basemap.boston) + 
+ geom_contour_filled(data = pred.results.all, 
+                     aes(x = x, y = y, z = response.preds.all), 
+                     breaks = c(0, seq(1, ceiling(max( pred.results.all$response.preds.all)), length.out = 16)), 
+                     alpha = .5) + 
+ geom_sf(data = boundary.sf.4326, inherit.aes = FALSE, col = "red", alpha = 0.0) +  
+ scale_fill_manual(values = cols, drop = FALSE) + 
+ labs(title = "Violent Crimes in Boston, 2015-2021", fill = "Total violent \ncrimes expected \nwithin 1/4 mi.") + 
+ theme(axis.title.x = element_blank()) + 
+ theme(axis.title.y = element_blank()) + 
+ coord_sf(crs = st_crs(4326))
+
+dev.off()
+
+png_files <- sprintf(png_fp, 1:9)
+gif_fp <- paste0(fp_figures, "predicted_violent_crimes.gif")
+gifski(png_files, gif_fp, delay = 2)
+unlink(png_files)
+utils::browseURL(gif_fp)
+```
+
+## Spatial satterning in residuals (plots)
+
+```{r resids_spatial_dependence}
+# note: A Gaussian GAM with identity link is just an ordinary linear model. In this situation, response residuals, deviance residuals, and pearson residuals are the same.
+
+
+years <- c("15", "16", "17", "18", "19", "20", "21")
+
+
+residuals.array <- array(matrix(0, nrow = nrow(modelall.df), ncol = (ncol(modelall.df) + 5)), dim = c(nrow(modelall.df), (ncol(modelall.df) + 5), length(years)))
+
+for (i in years){ 
+
+  resids.response       <- residuals(eval(as.name(paste0("model", i))), type = "response")        # Response residuals: raw residuals (data minus fitted values)
+
+
+
+  resids.deviance       <- residuals(eval(as.name(paste0("model", i))), type = "deviance")        # Deviance residuals: residuals defined by model family
+
+
+
+  resids.pearson        <- residuals(eval(as.name(paste0("model", i))), type = "pearson")         # Pearson residuals: raw residuals divided by the standard deviation of the data 
+
+
+
+  resids.pearson.scaled <- residuals(eval(as.name(paste0("model", i))), type = "scaled.pearson")  # Scaled Pearson residuals: raw residuals divided by the standard deviation of the data 
+                                                                                                  # according to the model mean variance relationship and estimated scale parameter.
+
+
+  resids.working        <- residuals(eval(as.name(paste0("model", i))), type = "working")         # Working residuals: residuals returned from model fitting at convergence
+
+
+  resids.all            <- cbind(eval(as.name(paste0("model", i, ".df"))), 
+                                 resids.response, resids.deviance, resids.pearson, 
+                                 resids.pearson.scaled, resids.working)  
+
+  counter               <- as.numeric(which(years == i))
+  
+  residuals.array[ , , counter] <- as.matrix(resids.all)
+  }
+
+resids.15 <- as.data.frame(residuals.array[ , , which(years == "15")])
+
+names(resids.15) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.15 <- st_as_sf(resids.15, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.16 <- as.data.frame(residuals.array[ , , which(years == "16")])
+
+names(resids.16) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.16 <- st_as_sf(resids.16, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.17 <- as.data.frame(residuals.array[ , , which(years == "17")])
+
+names(resids.17) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.17 <- st_as_sf(resids.17, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.18 <- as.data.frame(residuals.array[ , , which(years == "18")])
+
+names(resids.18) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.18 <- st_as_sf(resids.18, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.19 <- as.data.frame(residuals.array[ , , which(years == "19")])
+
+names(resids.19) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.19 <- st_as_sf(resids.19, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+resids.20 <- as.data.frame(residuals.array[ , , which(years == "20")])
+
+names(resids.20) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.20 <- st_as_sf(resids.20, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+resids.21 <- as.data.frame(residuals.array[ , , which(years == "21")])
+
+names(resids.21) <- c("lon", "lat", "crimes", "response.resids", "deviance.resids", 
+                      "pearson.resids", "pearson.scaled.resids", "working.resids")
+
+resids.21 <- st_as_sf(resids.21, coords = c("lon", "lat"), crs = st_crs(4326))
+
+
+
+width_in <-  7
+height_in <- 5
+reso <- 225
+
+png_fp <- file.path(tempdir(), "frame%03d.png")
+png(png_fp, width = (width_in * reso), height = (height_in * reso), res = reso)
+par(ask = FALSE)
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.15, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2015") + 
+  theme(axis.title = element_blank())   
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.16, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2016") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.17, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2017") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.18, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2018") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.19, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2019") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.20, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2020") + 
+  theme(axis.title = element_blank())
+
+ggmap(basemap.boston) + 
+        geom_sf(aes(color = pearson.resids), data = resids.21, alpha = 0.75, inherit.aes = F) + 
+        scale_color_gradient2("Pearson \nresiduals", low = "blue", mid = "darkgray", high = "red") + 
+  ggtitle("Spatial Patterning Within (Pearson) Residuals: 2021") + 
+  theme(axis.title = element_blank())
+
+dev.off()
+
+png_files <- sprintf(png_fp, 1:7)
+gif_fp <- paste0(fp_figures, "residual_spatial_patterning.gif")
+gifski(png_files, gif_fp, delay = 2)
+unlink(png_files)
+utils::browseURL(gif_fp)
+```
+
+## Construct data objects 
+
+```{r build_data_objs, eval= FALSE}
+yr.2015 <- read.csv(paste0(fp_raw_data, "2015_boston.csv"))
+yr.2016 <- read.csv(paste0(fp_raw_data, "2016_boston.csv"))
+yr.2017 <- read.csv(paste0(fp_raw_data, "2017_boston.csv"))
+yr.2018 <- read.csv(paste0(fp_raw_data, "2018_boston.csv"))
+yr.2019 <- read.csv(paste0(fp_raw_data, "2019_boston.csv"))
+yr.2020 <- read.csv(paste0(fp_raw_data, "2020_boston.csv"))
+yr.2021 <- read.csv(paste0(fp_raw_data, "2021_boston.csv"))
+
+#### AGGREGATE DATA ####
+
+yr.15to21 <- rbind(yr.2015, yr.2016, yr.2017, yr.2018, yr.2019, yr.2020, yr.2021)
+
+#### POSIX TIME ####
+
+yr.15to21$POSIX <- as.POSIXlt(strptime(as.character(
+                              yr.15to21$OCCURRED_ON_DATE), "%Y-%m-%d %H:%M"))
+
+#### FILTER TO RECORDS WITH SPATIAL COORDS ####
+map.15to21 <- yr.15to21[!is.na(yr.15to21$Lat), ]
+
+map.15to21 <- map.15to21[(map.15to21$Lat > -1), ]
+
+#### CREATE SF OBJECT ####
+map.15to21 <- st_as_sf(map.15to21, coords = c("Long", "Lat"), crs = 4326)
+
+#### FILTER TO RECORDS WITHIN ZIP CODES ####
+zips.sf <- read_sf(dsn = paste0(fp_raw_data, "Zip_Codes"), layer = "ZIP_Codes")
+
+zips.sf <- st_transform(zips.sf, crs = project_crs)
+
+bounded_map.15to21 <- map.15to21[zips.sf, ]
+
+unbounded_map.15to21 <- anti_join(map.15to21, as.data.frame(bounded_map.15to21))
+
+#### ASSIGN ZIP CODES TO RECORDS ####
+
+zip_indices <- sapply(st_intersects(bounded_map.15to21, zips.sf), 
+                      function(z) if (length(z) == 0) NA_integer_ else z[1]) # replaces over()
+
+zip_codes  <- zips.sf[zip_indices, "ZIP5"]
+
+st_geometry(zip_codes) <- NULL
+
+names(zip_codes) <- "ZIP5"
+
+zip_codes <- as.data.frame(zip_codes)
+
+bounded_map.15to21$ZIP5 <- NA
+
+bounded_map.15to21$ZIP5 <- zip_codes[, 1]
+
+bounded_map.15to21$ZIP5 <- as.factor(bounded_map.15to21$ZIP5)
+
+#### FILTER TO SERIOUS CRIMES ####
+offense_code_groups <- c("Robbery", "Homicide", "HOME INVASION", "Aggravated Assault") 
+
+filter1 <- bounded_map.15to21[bounded_map.15to21$OFFENSE_CODE_GROUP %in% offense_code_groups,]
+
+offense_descriptions_violent <- unique(filter1$OFFENSE_DESCRIPTION)
+
+offense_descriptions_all <- unique(bounded_map.15to21$OFFENSE_DESCRIPTION)
+
+offense_descriptions_all <- offense_descriptions_all[c(21,40,60,87,114,118,126,137,150,189,190,191,192,196,197,202,213,222,230,236,238,250,255,269,275,293)]
+
+offense_descriptions_project <- unique(c(offense_descriptions_violent, offense_descriptions_all))
+
+#### SPLIT BY YEAR ####
+boston_crime_spatial_all <- bounded_map.15to21[bounded_map.15to21$OFFENSE_DESCRIPTION %in% offense_descriptions_project,]
+boston_crime_spatial_15  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2015,] 
+boston_crime_spatial_16  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2016,]
+boston_crime_spatial_17  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2017,]
+boston_crime_spatial_18  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2018,]
+boston_crime_spatial_19  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2019,]
+boston_crime_spatial_20  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2020,]
+boston_crime_spatial_21  <- boston_crime_spatial_all[boston_crime_spatial_all$YEAR == 2021,]
+
+#### CRIMES WITHOUT SPATIAL INFO ####
+boston_crime_missing <- unbounded_map.15to21[unbounded_map.15to21$OFFENSE_DESCRIPTION %in% offense_descriptions_project,]
+
+#### CREATE AGGREGATION GRID AS SF OBJECT ####
+cell_size_ft <- 1320
+
+active.grid <- st_make_grid(boundary.sf, cellsize = cell_size_ft, square = F) %>% st_sf() 
+
+active.grid <- st_transform(active.grid, crs = 4326)
+
+active.grid <- dplyr::mutate(active.grid, ID = row_number(),  
+               center_x = st_coordinates(st_centroid(active.grid))[, 1],                                      
+               center_y = st_coordinates(st_centroid(active.grid))[, 2])
+
+#### *NEW* TRIM HEXAGONS WITH ZERO CRIME ACTIVITY IN 2015-2021 #### 
+all_crimes_binned <- st_join(bounded_map.15to21, active.grid)
+
+all_crime_counts <- all_crimes_binned %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_possible_IDs <- unique(all_crime_counts$ID)
+
+crime_possible_IDs <- crime_possible_IDs[1:(length(crime_possible_IDs) - 1)]
+
+active.grid <- active.grid[crime_possible_IDs,]
+
+active.grid <- active.grid[!is.na(active.grid$ID),]
+
+#### BIN OBSERVATIONS #### 
+
+boston_crime_join_all <- st_join(boston_crime_spatial_all, active.grid)
+boston_crime_join_15  <- st_join(boston_crime_spatial_15, active.grid)
+boston_crime_join_16  <- st_join(boston_crime_spatial_16, active.grid)
+boston_crime_join_17  <- st_join(boston_crime_spatial_17, active.grid)
+boston_crime_join_18  <- st_join(boston_crime_spatial_18, active.grid)
+boston_crime_join_19  <- st_join(boston_crime_spatial_19, active.grid)
+boston_crime_join_20  <- st_join(boston_crime_spatial_20, active.grid)
+boston_crime_join_21  <- st_join(boston_crime_spatial_21, active.grid)
+
+crime_counts_15 <- boston_crime_join_15 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_16 <- boston_crime_join_16 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_17 <- boston_crime_join_17 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_18 <- boston_crime_join_18 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_19 <- boston_crime_join_19 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_20 <- boston_crime_join_20 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_21 <- boston_crime_join_21 %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+crime_counts_all <- boston_crime_join_all %>% 
+  as.data.frame() %>% 
+  dplyr::group_by(ID) %>% 
+  dplyr::summarize(n = n())
+
+project.grid.15  <- left_join(active.grid, crime_counts_15, by = "ID")
+project.grid.16  <- left_join(active.grid, crime_counts_16, by = "ID")
+project.grid.17  <- left_join(active.grid, crime_counts_17, by = "ID")
+project.grid.18  <- left_join(active.grid, crime_counts_18, by = "ID")
+project.grid.19  <- left_join(active.grid, crime_counts_19, by = "ID")
+project.grid.20  <- left_join(active.grid, crime_counts_20, by = "ID")
+project.grid.21  <- left_join(active.grid, crime_counts_21, by = "ID")
+project.grid.all <- left_join(active.grid, crime_counts_all, by = "ID")
+
+for (i in 1:nrow(project.grid.15)){
+  if (is.na(st_drop_geometry(project.grid.15[i, "n"]))) {project.grid.15[i, "n"] <- 0}
+  
+  else {project.grid.15[i, "n"] <- st_drop_geometry(project.grid.15[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.16)){
+  if (is.na(st_drop_geometry(project.grid.16[i, "n"]))) {project.grid.16[i, "n"] <- 0}
+  
+  else {project.grid.16[i, "n"] <- st_drop_geometry(project.grid.16[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.17)){
+  if (is.na(st_drop_geometry(project.grid.17[i, "n"]))) {project.grid.17[i, "n"] <- 0}
+  
+  else {project.grid.17[i, "n"] <- st_drop_geometry(project.grid.17[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.18)){
+  if (is.na(st_drop_geometry(project.grid.18[i, "n"]))) {project.grid.18[i, "n"] <- 0}
+  
+  else {project.grid.18[i, "n"] <- st_drop_geometry(project.grid.18[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.19)){
+  if (is.na(st_drop_geometry(project.grid.19[i, "n"]))) {project.grid.19[i, "n"] <- 0}
+  
+  else {project.grid.19[i, "n"] <- st_drop_geometry(project.grid.19[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.20)){
+  if (is.na(st_drop_geometry(project.grid.20[i, "n"]))) {project.grid.20[i, "n"] <- 0}
+  
+  else {project.grid.20[i, "n"] <- st_drop_geometry(project.grid.20[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.21)){
+  if (is.na(st_drop_geometry(project.grid.21[i, "n"]))) {project.grid.21[i, "n"] <- 0}
+  
+  else {project.grid.21[i, "n"] <- st_drop_geometry(project.grid.21[i, "n"])}
+  }
+
+for (i in 1:nrow(project.grid.all)){
+  if (is.na(st_drop_geometry(project.grid.all[i, "n"]))) {project.grid.all[i, "n"] <- 0}
+  
+  else {project.grid.all[i, "n"] <- st_drop_geometry(project.grid.all[i, "n"])}
+  }
+
+
+save(project.grid.all, project.grid.15, project.grid.16, 
+     project.grid.17, project.grid.18, project.grid.19, 
+     project.grid.20, project.grid.21, boston_crime_missing, 
+     boston_crime_spatial_all, project_crs, yr.15to21, bounded_map.15to21, 
+     boundary.sf, boundary.sf.4326, 
+     file = paste0(fp_data_obj, "boston_spatial_project_r1.RData"))
+
+
+rm(yr.2015, yr.2016, yr.2017, yr.2018, yr.2019, yr.2020, yr.2021, filter1, zip_codes, offense_descriptions_violent, offense_descriptions_all, crime_counts_15, crime_counts_16, crime_counts_17, crime_counts_18, crime_counts_19, crime_counts_20, crime_counts_21, crime_counts_all, map.15to21, unbounded_map.15to21, crime_possible_IDs, offense_code_groups, zip_indices, all_crimes_binned, all_crime_counts, zips.sf, boston_crime_join_all, boston_crime_join_15, boston_crime_join_16, boston_crime_join_17, boston_crime_join_18, boston_crime_join_19, boston_crime_join_20, boston_crime_join_21, boston_crime_spatial_all, boston_crime_spatial_15, boston_crime_spatial_16, boston_crime_spatial_17, boston_crime_spatial_18, boston_crime_spatial_19, boston_crime_spatial_20, boston_crime_spatial_21, active.grid)
+```
