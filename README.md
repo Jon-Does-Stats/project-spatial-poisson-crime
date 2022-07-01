@@ -28,5 +28,5 @@
 <img src="https://raw.githubusercontent.com/Jon-Does-Stats/project-spatial-poisson-crime/main/figures/predicted_violent_crimes.gif" width=675>
 
 - (below) Pearson residuals by year from 2015 to 2021. Residuals appear random in nature and void of spatial patterning indicating spatial autocorrelation is being modeled successfully.
-- 
+
 <img src="https://raw.githubusercontent.com/Jon-Does-Stats/project-spatial-poisson-crime/main/figures/residual_spatial_patterning.gif" width=675>
